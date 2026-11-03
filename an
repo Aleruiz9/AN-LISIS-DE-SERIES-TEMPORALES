@@ -1,0 +1,166 @@
+# ==============================================================================
+# PROYECTO: ANÁLISIS DE SERIES TEMPORALES (DATASET AIRPASSENGERS)
+# Asignatura: MDA & Visualización Training - Reto Proyecto
+# Formato: Script completo R / Rmd para entrega en GitHub
+# ==============================================================================
+
+# 0. Instalación y carga de librerías necesarias
+if (!require("tseries")) install.packages("tseries")
+if (!require("ggplot2")) install.packages("ggplot2")
+
+library(tseries)
+library(ggplot2)
+
+# ==============================================================================
+# 1. CARGA Y EXPLORACIÓN INICIAL DE DATOS (Peso: 20%)
+# ==============================================================================
+
+# Cargar el dataset incluido en R
+data("AirPassengers")
+
+cat("==================================================\n")
+cat("1. VERIFICACIÓN Y ESTRUCTURA DEL DATASET\n")
+cat("==================================================\n")
+
+# Clase y estructura de la serie temporal
+print(class(AirPassengers))       # Confirma objeto de clase 'ts'
+print(start(AirPassengers))       # Inicio de la serie: Enero de 1949
+print(end(AirPassengers))         # Fin de la serie: Diciembre de 1960
+print(frequency(AirPassengers))   # Frecuencia: 12 (datos mensuales)
+
+# Resumen estadístico inicial
+cat("\n--- Resumen Estadístico ---\n")
+print(summary(AirPassengers))
+
+# Cálculo de la media y desviación estándar
+media_pasajeros <- mean(AirPassengers)
+sd_pasajeros <- sd(AirPassengers)
+
+cat("\nMedia de pasajeros (en miles):", round(media_pasajeros, 2), "\n")
+cat("Desviación estándar (en miles):", round(sd_pasajeros, 2), "\n")
+
+# Gráfico de la serie temporal original
+plot(AirPassengers, 
+     main = "Evolución Mensual de Pasajeros de Aerolíneas (1949 - 1960)",
+     ylab = "Pasajeros (en miles)", 
+     xlab = "Año", 
+     col = "darkblue", 
+     lwd = 2)
+grid()
+
+# Interpretación inicial:
+# La serie muestra una clara tendencia creciente a largo plazo junto con una
+# estacionalidad marcada cuyas amplitudes aumentan con el tiempo (modelo multiplicativo).
+
+# ==============================================================================
+# 2. ANÁLISIS DE TENDENCIA Y ESTACIONALIDAD (Peso: 30%)
+# ==============================================================================
+
+cat("\n==================================================\n")
+cat("2. DESCOMPOSICIÓN DE LA SERIE TEMPORAL\n")
+cat("==================================================\n")
+
+# Aplicación de descomposición multiplicativa (dado el aumento de la varianza)
+decomp_mult <- decompose(AirPassengers, type = "multiplicative")
+
+# Visualización gráfica de los componentes individuales
+plot(decomp_mult, col = "darkgreen")
+
+# Visualización alternativa del componente estacional para entender el patrón anual
+barplot(decomp_mult$seasonal[1:12], 
+        names.arg = month.abb, 
+        main = "Patrón Estacional Promedio por Mes",
+        ylab = "Factor Estacional", 
+        col = "steelblue")
+
+# Interpretación de tendencia y estacionalidad:
+# - Tendencia: Existe un incremento constante en el volumen de pasajeros a lo largo de los años.
+# - Estacionalidad: Se observan picos pronunciados en los meses de verano (Julio y Agosto)
+#   debido al periodo vacacional, y caídas notables en los meses de invierno (Noviembre y Febrero).
+
+# ==============================================================================
+# 3. ANÁLISIS DE ESTACIONARIEDAD (Peso: 30%)
+# ==============================================================================
+
+cat("\n==================================================\n")
+cat("3. EVALUACIÓN Y TRANSFORMACIÓN DE ESTACIONARIEDAD\n")
+cat("==================================================\n")
+
+# Configurar panel gráfico para comparar ACF y PACF originales
+par(mfrow = c(1, 2))
+acf(AirPassengers, main = "ACF - Serie Original")
+pacf(AirPassengers, main = "PACF - Serie Original")
+par(mfrow = c(1, 1))
+
+# Prueba de Dickey-Fuller Aumentada (ADF) en la serie original
+adf_original <- adf.test(AirPassengers)
+cat("\n--- Prueba ADF (Serie Original) ---\n")
+print(adf_original)
+
+# Dado que el p-value > 0.05, la serie original NO es estacionaria.
+# Procedemos a aplicar una diferenciación simple (diff) para eliminar la tendencia.
+# También aplicamos logaritmo para estabilizar la varianza creciente.
+
+log_airpassengers <- log(AirPassengers)
+diff_airpassengers <- diff(log_airpassengers)
+
+# Graficar la serie diferenciada
+plot(diff_airpassengers, 
+     main = "Serie Estabilizada y Diferenciada (log + diff)", 
+     ylab = "Diferencia de log(Pasajeros)", 
+     xlab = "Año", 
+     col = "darkred")
+grid()
+
+# Pruebas ACF, PACF y ADF de la serie transformada
+par(mfrow = c(1, 2))
+acf(diff_airpassengers, main = "ACF - Serie Diferenciada")
+pacf(diff_airpassengers, main = "PACF - Serie Diferenciada")
+par(mfrow = c(1, 1))
+
+adf_diff <- adf.test(diff_airpassengers)
+cat("\n--- Prueba ADF (Serie Diferenciada) ---\n")
+print(adf_diff)
+
+# Conclusión de Estacionariedad:
+# Tras la transformación (logaritmo + diferenciación), el p-value de la prueba ADF
+# es menor a 0.05, confirmando que la serie se ha transformado en ESTACIONARIA.
+
+# ==============================================================================
+# 4. DETECCIÓN E INTERPRETACIÓN DE VALORES ATÍPICOS (Peso: 20%)
+# ==============================================================================
+
+cat("\n==================================================\n")
+cat("4. DETECCIÓN DE VALORES ATÍPICOS (OUTLIERS)\n")
+cat("==================================================\n")
+
+# Diagrama de caja por mes para analizar la dispersión estacional y posibles atípicos
+boxplot(AirPassengers ~ cycle(AirPassengers), 
+        xlab = "Mes (1=Ene, 12=Dic)", 
+        ylab = "Pasajeros (en miles)", 
+        main = "Distribución Mensual y Detección de Outliers",
+        col = "lightblue",
+        names = month.abb)
+
+# Cálculo estadístico de outliers mediante la regla del Rango Intercuartílico (IQR)
+stats_outliers <- boxplot.stats(AirPassengers)$out
+cat("\nValores atípicos globales detectados mediante IQR en la serie original:\n")
+print(stats_outliers)
+
+# Interpretación de Atípicos:
+# En la serie original no se observan outliers puntuales extremos fuera del patrón
+# estacional general; sin embargo, los valores más elevados durante los años de
+# 1959 y 1960 en los meses de verano (Julio/Agosto) destacan como picos atípicos altos
+# debido al crecimiento exponencial acumulado de la industria aeronáutica.
+
+# ==============================================================================
+# 5. RESUMEN E INTERPRETACIÓN FINAL
+# ==============================================================================
+
+cat("\n==================================================\n")
+cat("5. CONCLUSIONES DEL ANÁLISIS\n")
+cat("==================================================\n")
+cat("1. TENDENCIA: Fuerte tendencia creciente sostenida entre 1949 y 1960.\n")
+cat("2. ESTACIONALIDAD: Comportamiento cíclico anual repetitivo con picos en verano (Jul-Ago).\n")
+cat("3. ESTACIONARIEDAD: La serie original no es estacionaria. Se logró la estacionariedad mediante la combinación de logaritmo y primera diferenciación.\n")
+cat("4. ATÍPICOS: Los picos observados coinciden con los máximos estacionales de los últimos años del histórico.\n")
